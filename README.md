@@ -525,65 +525,9 @@ make test-integration
 
 ## Phase 5 & 6: Analysis-Only Questions
 
-The following questions cover filesystem concepts beyond the implementation scope of this lab. Answer them in writing — no code required.
+The questions have been answered in Report.pdf attached in the repository !!
 
-### Branching and Checkout
 
-**Q5.1:** A branch in Git is just a file in `.git/refs/heads/` containing a commit hash. Creating a branch is creating a file. Given this, how would you implement `pes checkout <branch>` — what files need to change in `.pes/`, and what must happen to the working directory? What makes this operation complex?
-
-### Ans 5.1
-To implement `pes checkout <branch>`, I would do three things:
-1. Validate the branch exists in `.pes/refs/heads/<branch>`.
-2. Update `.pes/HEAD` to point to `ref: refs/heads/<branch>`.
-3. Read the commit hash from that branch, load its root tree, and rewrite the working directory to match that snapshot (create/update/delete files as needed).
-
-The tricky part is not updating HEAD; it is safely changing the working directory. You have to avoid deleting user changes, handle nested trees correctly, and make sure index + working directory + HEAD all end up consistent.
-
-**Q5.2:** When switching branches, the working directory must be updated to match the target branch's tree. If the user has uncommitted changes to a tracked file, and that file differs between branches, checkout must refuse. Describe how you would detect this "dirty working directory" conflict using only the index and the object store.
-
-### Ans 4.2
-I would detect conflicts by comparing three versions of each tracked path:
-1. Version in current HEAD tree (baseline).
-2. Version in target branch tree (what checkout wants to write).
-3. Current working directory state (using index metadata/hash checks).
-
-If a file is modified in working directory relative to index/HEAD, and that same file would also change when moving to target branch, that is a conflict and checkout should stop.
-
-In short: if file is dirty locally and target branch wants a different content for that path, refuse checkout.
-
-**Q5.3:** "Detached HEAD" means HEAD contains a commit hash directly instead of a branch reference. What happens if you make commits in this state? How could a user recover those commits?
-
-### Ans 5.3
-In detached HEAD, new commits are still created normally, but no branch name moves forward with them. So those commits can become hard to find later.
-
-Recovery is simple if you know the commit hash: create a new branch pointing to it, like `git branch rescued <hash>` (or equivalent in PES). If you realize late, reflog-style history (if implemented) helps find that commit again.
-
-### Garbage Collection and Space Reclamation
-
-**Q6.1:** Over time, the object store accumulates unreachable objects — blobs, trees, or commits that no branch points to (directly or transitively). Describe an algorithm to find and delete these objects. What data structure would you use to track "reachable" hashes efficiently? For a repository with 100,000 commits and 50 branches, estimate how many objects you'd need to visit.
-
-### Ans 6.1
-I would use a classic mark-and-sweep approach:
-1. Start from all branch heads in `.pes/refs/heads/*` as roots.
-2. Traverse reachable commits via parent links.
-3. From each commit, mark its tree.
-4. Recursively mark all subtree and blob objects referenced by trees.
-5. After marking, scan `.pes/objects` and delete anything unmarked.
-
-For fast lookup, use a hash set of object IDs (`reachable`).
-
-For 100,000 commits and 50 branches, commit traversal is usually near 100,000 unique commits (branches share history). Total visited objects could be a few hundred thousand when trees and blobs are included, depending on project size and change frequency.
-
-**Q6.2:** Why is it dangerous to run garbage collection concurrently with a commit operation? Describe a race condition where GC could delete an object that a concurrent commit is about to reference. How does Git's real GC avoid this?
-
-### Ans 6.2
-Running GC during commit creation is risky because commit is multi-step. Example race:
-1. Commit process writes new blob/tree objects.
-2. Before branch ref is updated, GC scans refs and does not see these new objects as reachable.
-3. GC deletes them.
-4. Commit then writes/updates commit ref that points to now-missing objects.
-
-Git avoids this using safety mechanisms like temporary reachability protection, conservative pruning (age-based), and coordination/locking so in-progress objects are not collected immediately.
 
 ---
 
